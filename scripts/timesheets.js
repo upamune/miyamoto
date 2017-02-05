@@ -107,13 +107,37 @@ loadTimesheets = function (exports) {
     if(this.datetime) {
       var data = this.storage.get(username, this.datetime);
       if(!data.signOut || data.signOut === '-') {
-        this.storage.set(username, this.datetime, {signOut: this.datetime});
+        // 退勤時に休憩継続している場合は終了させる
+        if (data.breakStart) {
+          var breakStart = data.breakStart;
+          // Milliseconds -> Minutes
+          var breakTotalMinutes = Math.abs(this.datetime - data.breakStart) / 1000 / 60;
+          var btm = breakTotalMinutes;
+          // 休憩時間合計がすでにあるとき
+          if (data.breakTotal) {
+            breakTotalMinutes += data.breakTotal;
+          }
+          this.storage.set(username, this.datetime, { breakStart: null, breakTotal: breakTotalMinutes });
+        }
+        this.storage.set(username, this.datetime, { signOut: this.datetime });
         this.responder.template("退勤", username, this.datetimeStr);
       }
       else {
         // 更新の場合は時間を明示する必要がある
         if(!!this.time) {
-          this.storage.set(username, this.datetime, {signOut: this.datetime});
+          // 退勤時に休憩継続している場合は終了させる
+          if (data.breakStart) {
+            var breakStart = data.breakStart;
+            // Milliseconds -> Minutes
+            var breakTotalMinutes = Math.abs(this.datetime - data.breakStart) / 1000 / 60;
+            var btm = breakTotalMinutes;
+            // 休憩時間合計がすでにあるとき
+            if (data.breakTotal) {
+              breakTotalMinutes += data.breakTotal;
+            }
+            this.storage.set(username, this.datetime, { breakStart: null, breakTotal: breakTotalMinutes });
+          }
+          this.storage.set(username, this.datetime, { signOut: this.datetime });
           this.responder.template("退勤更新", username, this.datetimeStr);
         }
       }
