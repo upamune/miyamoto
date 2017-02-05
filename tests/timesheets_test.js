@@ -105,6 +105,18 @@ QUnit.test( "Timesheets", function(assert) {
     return String(DateUtils.toDate(DateUtils.now()));
   }
 
+  // 休憩開始
+  storageTest({}, function(msgTest) {
+    msgTest('test1', '休憩開始', [['休憩開始', 'test1', "2014/01/02 12:34"]]);
+  });
+
+  // 休憩終了
+  var test1 = {};
+  storageTest({'test1': test1}, function(msgTest) {
+    test1[nowDateStr()] = { user: 'test1', breakStart: new Date(2014, 0, 2, 12, 24, 0) };
+    msgTest('test1', '休憩終了', [['休憩終了', 'test1', 10]]);
+  });
+
   // 出勤
   storageTest({}, function(msgTest) {
     msgTest('test1', 'おはよう', [['出勤', 'test1', "2014/01/02 12:34"]]);
@@ -271,6 +283,5 @@ QUnit.test( "Timesheets", function(assert) {
   storageTest({'test1': test1, 'test2': {}}, function(msgTest) {
     msgTest('test1', '__confirmSignOut__', []);
   });
-
 
 });

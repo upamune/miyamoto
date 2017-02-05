@@ -26,6 +26,8 @@ loadTimesheets = function (exports) {
 
     // コマンド集
     var commands = [
+      ['actionBreakStart', /休憩開始/],
+      ['actionBreakEnd', /休憩終了/],
       ['actionSignOut', /(バ[ー〜ァ]*イ|ば[ー〜ぁ]*い|おやすみ|お[つっ]ー|おつ|さらば|お先|お疲|帰|乙|bye|night|(c|see)\s*(u|you)|退勤|ごきげんよ|グ[ッ]?バイ)/],
       ['actionWhoIsOff', /(だれ|誰|who\s*is).*(休|やす(ま|み|む))/],
       ['actionWhoIsIn', /(だれ|誰|who\s*is)/],
@@ -46,6 +48,41 @@ loadTimesheets = function (exports) {
       return this[command[0]](username, message);
     }
   }
+
+  // 休憩開始
+  Timesheets.prototype.actionBreakStart = function(username, message) {
+    // とりあえず更新は無視
+    if(this.datetime) {
+      var data = this.storage.get(username, this.datetime);
+      // 休憩開始していないとき
+      // 休憩開始しているときはとりえあず無視
+      if(!data.breakStart) {
+        this.storage.set(username, this.datetime, {breakStart: this.datetime});
+        this.responder.template("休憩開始", username, this.datetimeStr);
+      }
+    }
+  };
+
+  // 休憩終了
+  Timesheets.prototype.actionBreakEnd = function(username, message) {
+    // とりあえず更新は無視
+    if(this.datetime) {
+      var data = this.storage.get(username, this.datetime);
+      // 休憩開始しているとき
+      if(data.breakStart) {
+        var breakStart = data.breakStart;
+        // Milliseconds -> Minutes
+        var breakTotalMinutes = Math.abs(this.datetime - data.breakStart) / 1000 / 60;
+        var btm = breakTotalMinutes;
+        // 休憩時間合計がすでにあるとき
+        if(data.breakTotal) {
+          breakTotalMinutes += data.breakTotal;
+        }
+        this.storage.set(username, this.datetime, { breakStart: null, breakTotal: breakTotalMinutes});
+        this.responder.template("休憩終了", username, btm);
+      }
+    }
+  };
 
   // 出勤
   Timesheets.prototype.actionSignIn = function(username, message) {

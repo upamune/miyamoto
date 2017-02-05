@@ -1,5 +1,5 @@
-/* Miyamoto-san https://github.com/masuidrive/miyamoto/ */
-/* (c) masuidrive 2014- License: MIT */
+/* Miyamoto-san https://github.com/upamune/miyamoto/ */
+/* (c) upamune 2017- License: MIT */
 /* ------------------- */
 // 日付関係の関数
 // DateUtils = loadDateUtils();
@@ -358,10 +358,11 @@ loadGSTemplate = function() {
       }
       else {
         var now = DateUtils.now();
-        this.sheet.getRange("A1:L2").setValues([
+        this.sheet.getRange("A1:N2").setValues([
           [
             "出勤", "出勤更新", "退勤", "退勤更新", "休暇", "休暇取消",
-            "出勤中", "出勤なし", "休暇中", "休暇なし", "出勤確認", "退勤確認"
+            "出勤中", "出勤なし", "休暇中", "休暇なし", "出勤確認", "退勤確認",
+            "休憩開始", "休憩終了"
           ],
           [
             "<@#1> おはようございます (#2)", "<@#1> 出勤時間を#2へ変更しました",
@@ -369,7 +370,8 @@ loadGSTemplate = function() {
             "<@#1> #2を休暇として登録しました", "<@#1> #2の休暇を取り消しました",
             "#1が出勤しています", "全員退勤しています",
             "#1は#2が休暇です", "#1に休暇の人はいません",
-            "今日は休暇ですか？ #1", "退勤しましたか？ #1"
+            "今日は休暇ですか？ #1", "退勤しましたか？ #1",
+            "<@#1> つ :coffee:", "<@#1> #2分休憩しました。お仕事がんばって :muscle:"
           ]
         ]);
       }
@@ -431,6 +433,8 @@ loadGSTimesheets = function () {
         { name: '出勤' },
         { name: '退勤' },
         { name: 'ノート' },
+        { name: '休憩中' },
+        { name: '休憩時間合計' },
       ],
       properties: [
         { name: 'DayOff', value: '土,日', comment: '← 月,火,水みたいに入力してください。アカウント停止のためには「全部」と入れてください。'},
@@ -479,7 +483,7 @@ loadGSTimesheets = function () {
     rowNo += parseInt((date.getTime()-date.getTimezoneOffset()*60*1000)/(1000*24*60*60)) - parseInt((s.getTime()-s.getTimezoneOffset()*60*1000)/(1000*24*60*60));
     return rowNo;
   };
-
+//
   GSTimesheets.prototype.get = function(username, date) {
     var sheet = this._getSheet(username);
     var rowNo = this._getRowNo(username, date);
@@ -487,17 +491,17 @@ loadGSTimesheets = function () {
       return v === '' ? undefined : v;
     });
 
-    return({ user: username, date: row[0], signIn: row[1], signOut: row[2], note: row[3] });
+    return({ user: username, date: row[0], signIn: row[1], signOut: row[2], note: row[3], breakStart: row[4], breakTotal: row[5] });
   };
 
   GSTimesheets.prototype.set = function(username, date, params) {
     var row = this.get(username, date);
-    _.extend(row, _.pick(params, 'signIn', 'signOut', 'note'));
+    _.extend(row, _.pick(params, 'signIn', 'signOut', 'note', 'breakStart', 'breakTotal'));
 
     var sheet = this._getSheet(username);
     var rowNo = this._getRowNo(username, date);
 
-    var data = [DateUtils.toDate(date), row.signIn, row.signOut, row.note].map(function(v) {
+    var data = [DateUtils.toDate(date), row.signIn, row.signOut, row.note, row.breakStart, row.breakTotal].map(function(v) {
       return v == null ? '' : v;
     });
     sheet.getRange("A"+rowNo+":"+String.fromCharCode(65 + this.scheme.columns.length - 1)+rowNo).setValues([data]);
@@ -740,6 +744,8 @@ loadTimesheets = function (exports) {
 
     // コマンド集
     var commands = [
+      ['actionBreakStart', /休憩開始/],
+      ['actionBreakEnd', /休憩終了/],
       ['actionSignOut', /(バ[ー〜ァ]*イ|ば[ー〜ぁ]*い|おやすみ|お[つっ]ー|おつ|さらば|お先|お疲|帰|乙|bye|night|(c|see)\s*(u|you)|退勤|ごきげんよ|グ[ッ]?バイ)/],
       ['actionWhoIsOff', /(だれ|誰|who\s*is).*(休|やす(ま|み|む))/],
       ['actionWhoIsIn', /(だれ|誰|who\s*is)/],
@@ -760,6 +766,41 @@ loadTimesheets = function (exports) {
       return this[command[0]](username, message);
     }
   }
+
+  // 休憩開始
+  Timesheets.prototype.actionBreakStart = function(username, message) {
+    // とりあえず更新は無視
+    if(this.datetime) {
+      var data = this.storage.get(username, this.datetime);
+      // 休憩開始していないとき
+      // 休憩開始しているときはとりえあず無視
+      if(!data.breakStart) {
+        this.storage.set(username, this.datetime, {breakStart: this.datetime});
+        this.responder.template("休憩開始", username, this.datetimeStr);
+      }
+    }
+  };
+
+  // 休憩終了
+  Timesheets.prototype.actionBreakEnd = function(username, message) {
+    // とりあえず更新は無視
+    if(this.datetime) {
+      var data = this.storage.get(username, this.datetime);
+      // 休憩開始しているとき
+      if(data.breakStart) {
+        var breakStart = data.breakStart;
+        // Milliseconds -> Minutes
+        var breakTotalMinutes = Math.abs(this.datetime - data.breakStart) / 1000 / 60;
+        var btm = breakTotalMinutes;
+        // 休憩時間合計がすでにあるとき
+        if(data.breakTotal) {
+          breakTotalMinutes += data.breakTotal;
+        }
+        this.storage.set(username, this.datetime, { breakStart: null, breakTotal: breakTotalMinutes});
+        this.responder.template("休憩終了", username, btm);
+      }
+    }
+  };
 
   // 出勤
   Timesheets.prototype.actionSignIn = function(username, message) {
